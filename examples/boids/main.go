@@ -403,7 +403,7 @@ func main() {
 	}
 	defer glfw.Terminate()
 
-	glfw.WindowHint(glfw.ClientAPI, glfw.NoAPI)
+	glfw.WindowHint(glfw.ClientAPI, glfw.NoAPI) // OpenGL 사용 안 함
 	window, err := glfw.CreateWindow(640, 480, "go-webgpu with glfw", nil, nil)
 	if err != nil {
 		panic(err)
