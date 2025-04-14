@@ -22,3 +22,12 @@ The included static libraries are built via [GitHub Actions](.github/workflows/b
 [c]: examples/cube
 [t-i]: https://raw.githubusercontent.com/rajveermalviya/go-webgpu/main/tests/triangle/image-msaa.png
 [t]: examples/triangle
+
+
+## 학습 
+
+webgpu를 사용하여 go로 렌더러와 CG(계산 기하), 물리(충돌 중심) 구현을 연습하고자 합니다. 
+
+CG와 물리는 게임 서버에서도 많이 사용되는 핵심 기능입니다. 짬짬이 문서를 작성하면서 상세하게 
+이해할 수 있는 자료와 코드를 축적하고자 합니다. 
+
