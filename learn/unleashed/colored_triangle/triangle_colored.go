@@ -107,7 +107,8 @@ type State struct {
 var shader string
 
 type Vertex struct {
-	pos [3]float32
+	pos   [3]float32
+	color [4]float32
 }
 
 var VertexBufferLayout = wgpu.VertexBufferLayout{
@@ -119,29 +120,37 @@ var VertexBufferLayout = wgpu.VertexBufferLayout{
 			Offset:         0,
 			ShaderLocation: 0,
 		},
+		{
+			Format:         wgpu.VertexFormatFloat32x4,
+			Offset:         4 * 3,
+			ShaderLocation: 1,
+		},
 	},
 }
 
-func createVertex(p1, p2, p3 float32) Vertex {
-	return Vertex{pos: [3]float32{p1, p2, p3}}
+func createVertex(p1, p2, p3 float32, c1, c2, c3, alpha float32) Vertex {
+	return Vertex{
+		pos:   [3]float32{p1, p2, p3},
+		color: [4]float32{c1, c2, c3, alpha},
+	}
 }
 
 var vertexData = [...]Vertex{
-	createVertex(0.0, 0.5, 0.0),
-	createVertex(0.5, 0.0, 0.0),
-	createVertex(1, 0.5, 0.0),
+	createVertex(0.0, 0.5, 0.0, 1.0, 0.0, 1.0, 1.0),
+	createVertex(0.5, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0),
+	createVertex(1, 0.5, 0.0, 1.0, 1.0, 1.0, 1.0),
 
-	createVertex(0.0, 0.5, 0.0),
-	createVertex(-0.5, 0.0, 0.0),
-	createVertex(0.5, 0.0, 0.0),
+	createVertex(0.0, 0.5, 0.0, 1.0, 0.0, 1.0, 1.0),
+	createVertex(-0.5, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0),
+	createVertex(0.5, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0),
 
-	createVertex(-0.5, 0.0, 0.0),
-	createVertex(0.0, -0.5, 0.0),
-	createVertex(0.5, 0.0, 0.0),
+	createVertex(-0.5, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0),
+	createVertex(0.0, -0.5, 0.0, 1.0, 1.0, 1.0, 1.0),
+	createVertex(0.5, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0),
 
-	createVertex(-0.5, 0.0, 0.0),
-	createVertex(-1.0, -0.5, 0.0),
-	createVertex(0.0, -0.5, 0.0),
+	createVertex(-0.5, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0),
+	createVertex(-1.0, -0.5, 0.0, 1.0, 0.0, 1.0, 1.0),
+	createVertex(0.0, -0.5, 0.0, 1.0, 1.0, 0.0, 1.0),
 }
 
 func InitState[T interface{ GetSize() (int, int) }](window T, sd *wgpu.SurfaceDescriptor) (s *State, err error) {

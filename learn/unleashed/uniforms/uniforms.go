@@ -91,25 +91,30 @@ func init() {
 }
 
 type State struct {
-	instance  *wgpu.Instance
-	adapter   *wgpu.Adapter
-	surface   *wgpu.Surface
-	device    *wgpu.Device
-	queue     *wgpu.Queue
-	config    *wgpu.SurfaceConfiguration
-	pipeline  *wgpu.RenderPipeline
-	vertexBuf *wgpu.Buffer
+	instance   *wgpu.Instance
+	adapter    *wgpu.Adapter
+	surface    *wgpu.Surface
+	device     *wgpu.Device
+	queue      *wgpu.Queue
+	config     *wgpu.SurfaceConfiguration
+	pipeline   *wgpu.RenderPipeline
+	vertexBuf  *wgpu.Buffer
+	uniformBuf *wgpu.Buffer
+	bindGroup  *wgpu.BindGroup
+	tick       int
 }
 
 // embed annotation tells go to embed the file into shader string
 
-//go:embed triangle.wgsl
+//go:embed uniforms.wgsl
 var shader string
 
 type Vertex struct {
-	pos [3]float32
+	pos   [3]float32
+	color [4]float32
 }
 
+// 버텍스 정의가 js에 비해 매우 간결하다.
 var VertexBufferLayout = wgpu.VertexBufferLayout{
 	ArrayStride: uint64(unsafe.Sizeof(Vertex{})),
 	StepMode:    wgpu.VertexStepModeVertex,
@@ -119,29 +124,38 @@ var VertexBufferLayout = wgpu.VertexBufferLayout{
 			Offset:         0,
 			ShaderLocation: 0,
 		},
+		{
+			Format:         wgpu.VertexFormatFloat32x4,
+			Offset:         4 * 3,
+			ShaderLocation: 1,
+		},
 	},
 }
 
-func createVertex(p1, p2, p3 float32) Vertex {
-	return Vertex{pos: [3]float32{p1, p2, p3}}
+func createVertex(p1, p2, p3 float32, c1, c2, c3, alpha float32) Vertex {
+	return Vertex{
+		pos:   [3]float32{p1, p2, p3},
+		color: [4]float32{c1, c2, c3, alpha},
+	}
 }
 
+// 초기화할 때 함수 호출로 간결한 코드 작성이 가능하다.
 var vertexData = [...]Vertex{
-	createVertex(0.0, 0.5, 0.0),
-	createVertex(0.5, 0.0, 0.0),
-	createVertex(1, 0.5, 0.0),
+	createVertex(0.0, 0.5, 0.0, 1.0, 0.0, 1.0, 1.0),
+	createVertex(0.5, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0),
+	createVertex(1, 0.5, 0.0, 1.0, 1.0, 1.0, 1.0),
 
-	createVertex(0.0, 0.5, 0.0),
-	createVertex(-0.5, 0.0, 0.0),
-	createVertex(0.5, 0.0, 0.0),
+	createVertex(0.0, 0.5, 0.0, 1.0, 0.0, 1.0, 1.0),
+	createVertex(-0.5, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0),
+	createVertex(0.5, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0),
 
-	createVertex(-0.5, 0.0, 0.0),
-	createVertex(0.0, -0.5, 0.0),
-	createVertex(0.5, 0.0, 0.0),
+	createVertex(-0.5, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0),
+	createVertex(0.0, -0.5, 0.0, 1.0, 1.0, 1.0, 1.0),
+	createVertex(0.5, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0),
 
-	createVertex(-0.5, 0.0, 0.0),
-	createVertex(-1.0, -0.5, 0.0),
-	createVertex(0.0, -0.5, 0.0),
+	createVertex(-0.5, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0),
+	createVertex(-1.0, -0.5, 0.0, 1.0, 0.0, 1.0, 1.0),
+	createVertex(0.0, -0.5, 0.0, 1.0, 1.0, 0.0, 1.0),
 }
 
 func InitState[T interface{ GetSize() (int, int) }](window T, sd *wgpu.SurfaceDescriptor) (s *State, err error) {
@@ -151,7 +165,7 @@ func InitState[T interface{ GetSize() (int, int) }](window T, sd *wgpu.SurfaceDe
 			s = nil
 		}
 	}()
-	s = &State{}
+	s = &State{tick: 0}
 
 	s.instance = wgpu.CreateInstance(nil)
 
@@ -208,6 +222,13 @@ func InitState[T interface{ GetSize() (int, int) }](window T, sd *wgpu.SurfaceDe
 		return s, err
 	}
 
+	// uniform buffer
+	s.uniformBuf, err = s.device.CreateBufferInit(&wgpu.BufferInitDescriptor{
+		Label:    "Uniform Buffer",
+		Contents: wgpu.ToBytes([]float32{0.3, 0.3, 0.3}),
+		Usage:    wgpu.BufferUsageUniform | wgpu.BufferUsageCopyDst,
+	})
+
 	// PipelineLayout, PipelineLayoutDesc
 
 	s.pipeline, err = s.device.CreateRenderPipeline(&wgpu.RenderPipelineDescriptor{
@@ -241,6 +262,24 @@ func InitState[T interface{ GetSize() (int, int) }](window T, sd *wgpu.SurfaceDe
 		},
 	})
 
+	bindGroupLayout := s.pipeline.GetBindGroupLayout(0)
+	defer bindGroupLayout.Release()
+
+	s.bindGroup, err = s.device.CreateBindGroup(&wgpu.BindGroupDescriptor{
+		Layout: bindGroupLayout,
+		Entries: []wgpu.BindGroupEntry{
+			{
+				Binding: 0,
+				Buffer:  s.uniformBuf,
+				Size:    wgpu.WholeSize,
+			},
+		},
+	})
+
+	if err != nil {
+		return s, err
+	}
+
 	return s, nil
 }
 
@@ -254,6 +293,8 @@ func (s *State) Resize(width, height int) {
 }
 
 func (s *State) Render() error {
+	s.tick++
+
 	nextTexture, err := s.surface.GetCurrentTexture()
 	if err != nil {
 		return err
@@ -263,6 +304,12 @@ func (s *State) Render() error {
 		return err
 	}
 	defer view.Release()
+
+	m := s.tick % 100
+	cc := float32(m) * 0.001
+
+	// 버퍼 내용을 필요할 때 전달하면 된다.
+	s.queue.WriteBuffer(s.uniformBuf, 0, wgpu.ToBytes([]float32{cc, 0, cc}))
 
 	encoder, err := s.device.CreateCommandEncoder(&wgpu.CommandEncoderDescriptor{
 		Label: "Command Encoder",
@@ -284,6 +331,7 @@ func (s *State) Render() error {
 	})
 
 	pass.SetPipeline(s.pipeline)
+	pass.SetBindGroup(0, s.bindGroup, nil)
 	pass.SetVertexBuffer(0, s.vertexBuf, 0, wgpu.WholeSize)
 	pass.Draw(12, 4, 0, 0)
 	pass.End()
@@ -302,9 +350,24 @@ func (s *State) Render() error {
 }
 
 func (s *State) Destroy() {
+	if s.bindGroup != nil {
+		s.bindGroup.Release()
+		s.bindGroup = nil
+	}
+
 	if s.pipeline != nil {
 		s.pipeline.Release()
 		s.pipeline = nil
+	}
+
+	if s.uniformBuf != nil {
+		s.uniformBuf.Release()
+		s.uniformBuf = nil
+	}
+
+	if s.vertexBuf != nil {
+		s.vertexBuf.Release()
+		s.vertexBuf = nil
 	}
 
 	if s.config != nil {
@@ -331,3 +394,10 @@ func (s *State) Destroy() {
 		s.instance = nil
 	}
 }
+
+// NOTE:
+// - uniform 버퍼는 글로벌 버퍼이다.
+// - group은 bind 그룹이다.
+// - 하나의 그룹에 여러 버퍼를 바인딩 할 수 있다.
+
+// - 쓰지 않으면 바인딩 그룹이 생성되지 않아 런타임 오류가 발생한다.
